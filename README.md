@@ -1,5 +1,9 @@
 ![Omarchy 4 on an Apple Silicon MacBook: the top bar flowing around the display notch on a fresh install](hero.jpg)
 
+> [!IMPORTANT]
+> **Mac support has been merged upstream** into [omacom/omarchy-mac-pkgs](https://github.com/omacom/omarchy-mac-pkgs).
+> To install Omarchy on a Mac, use the native installer at [omacom/omarchy-mac-installer](https://github.com/omacom/omarchy-mac-installer).
+
 # Omarchy Mac
 
 Omarchy 4 on Apple Silicon, alongside macOS: Asahi Alarm + Omarchy, installed
