@@ -105,6 +105,11 @@ cat > "$stub_bin/pacman" <<'STUB'
 printf 'pacman' >> "$OMARCHY_TEST_CALL_LOG"
 printf '\t%s' "$@" >> "$OMARCHY_TEST_CALL_LOG"
 printf '\n' >> "$OMARCHY_TEST_CALL_LOG"
+# Listing a repository never prompts. Answer as edge does today: hyprland only.
+if [[ " $* " == *" -Sl omarchy "* ]]; then
+  printf 'omarchy hyprland 0.56.2-7\n'
+  exit 0
+fi
 if [[ " $* " != *" --noconfirm "* ]]; then
   printf 'Replace package? [Y/n] ' >&2
   IFS= read -r first_answer || true
@@ -130,8 +135,14 @@ output=$(
     OMARCHY_TEST_CALL_LOG="$call_log" \
     bash -s -- --no-snapshot 2>&1
 ) || fail 'piped recovery succeeds without reading script text as prompt answers' "$output"
-grep -q $'^pacman\t-Syu\t--noconfirm\tomarchy/hyprland\tomarchy/hyprtoolkit\tomarchy/hyprland-guiutils$' "$call_log" ||
-  fail 'piped recovery runs the noninteractive package transaction' "$(cat "$call_log")"
+# The selection follows the synced edge database, so the sync comes first.
+grep -q $'^pacman\t-Sy\t--noconfirm$' "$call_log" ||
+  fail 'piped recovery syncs the databases before choosing targets' "$(cat "$call_log")"
+[[ $(grep -n $'^pacman\t-Sy\t--noconfirm$' "$call_log" | head -1 | cut -d: -f1) -lt \
+   $(grep -n $'\t-Sl\tomarchy$' "$call_log" | tail -1 | cut -d: -f1) ]] ||
+  fail 'piped recovery chooses targets after the sync' "$(cat "$call_log")"
+grep -q $'^pacman\t-Syu\t--noconfirm\tomarchy/hyprland$' "$call_log" ||
+  fail 'piped recovery runs the noninteractive package transaction with what edge carries' "$(cat "$call_log")"
 ! grep -q '^answers' "$call_log" || fail 'piped recovery lets pacman prompt on script input' "$(cat "$call_log")"
 grep -q '^\[omarchy\]$' "$conf" || fail 'piped recovery prepares the package source' "$(cat "$conf")"
 [[ -f "$conf.bak" ]] || fail 'piped recovery backs up the package configuration'

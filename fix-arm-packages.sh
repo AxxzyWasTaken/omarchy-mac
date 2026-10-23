@@ -109,9 +109,15 @@ fi
 # shellcheck source=install/helpers/arm-package-sources.sh
 source "$helper"
 
-mapfile -t targets < <(OMARCHY_PACMAN_CONFIG="$PACMAN_CONF" omarchy_arm_package_targets)
+# stdin is the script itself when piped, so nothing here may read it.
+choose_targets() {
+  mapfile -t targets < <(OMARCHY_PACMAN_CONFIG="$PACMAN_CONF" omarchy_arm_package_targets </dev/null)
+}
 
 if (( dry_run )); then
+  # A dry run syncs nothing, so it reports the selection the databases on the
+  # machine give now; on a machine that never synced [omarchy], that is every target.
+  choose_targets
   preview=$(mktemp)
   cp "$PACMAN_CONF" "$preview"
   # Nothing leaves the temporary copy: the helper's writes land there as this
@@ -150,6 +156,13 @@ fi
 # is that path arriving by another route, not a bypass, so it says so the same
 # way omarchy-update-system-pkgs does. Without it the hook aborts the
 # transaction and the recovery gets no further than the machine it is fixing.
+# The selection follows what the synced [omarchy] database carries, and a
+# machine that predates this policy has never synced it: without this the
+# helper selects every target and the transaction stops at the ones edge no
+# longer publishes. The -Syu follows straight after.
+sudo env OMARCHY_UPDATE_PACMAN=1 pacman -Sy --noconfirm </dev/null
+choose_targets
+
 echo "Updating the Hyprland stack together with the system"
 sudo env OMARCHY_UPDATE_PACMAN=1 pacman -Syu --noconfirm "${targets[@]}"
 
