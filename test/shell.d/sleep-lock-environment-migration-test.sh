@@ -180,6 +180,29 @@ for absent_state in not-found masked; do
   pass "sleep lock migration skips the repair when the unit is $absent_state"
 done
 
+# A unit systemd found but could not load (a broken drop-in, say) has not been
+# repaired, so omarchy-migrate must leave the migration pending.
+bad_setting_home="$test_tmp/bad-setting-home"
+bad_setting_calls="$test_tmp/bad-setting-calls"
+bad_setting_source="$test_tmp/bad-setting-source"
+bad_setting_markers="$test_tmp/bad-setting-markers"
+mkdir -p "$bad_setting_home/run" "$bad_setting_source/migrations"
+cp "$migration" "$bad_setting_source/migrations/"
+if HOME="$bad_setting_home" XDG_CONFIG_HOME="$bad_setting_home/.config" XDG_RUNTIME_DIR="$bad_setting_home/run" \
+  SYSTEMCTL_CALLS="$bad_setting_calls" PATH="$stub_bin:$PATH" \
+  GRAPHICAL_STATE=active SLEEP_LOCK_LOAD_STATE=bad-setting \
+  OMARCHY_PATH="$bad_setting_source" OMARCHY_MIGRATION_STATE="$bad_setting_markers" \
+  bash "$ROOT/bin/omarchy-migrate" >"$test_tmp/bad-setting-output" 2>&1; then
+  fail "sleep lock migration marks a bad-setting unit complete"
+fi
+[[ ! -f $bad_setting_markers/1785608166.sh ]] ||
+  fail "sleep lock migration writes a completion marker for a bad-setting unit"
+grep -F 'LoadState=bad-setting' "$test_tmp/bad-setting-output" >/dev/null ||
+  fail "sleep lock migration does not report the unloadable state it found"
+grep -F -- '--user restart omarchy-sleep-lock.service' "$bad_setting_calls" >/dev/null &&
+  fail "sleep lock migration restarts a bad-setting unit"
+pass "sleep lock migration stays pending when the unit is bad-setting"
+
 loadstate_failed_calls="$test_tmp/loadstate-failed-calls"
 if run_migration "$test_tmp/loadstate-failed-home" "$loadstate_failed_calls" \
   env FAIL_SYSTEMCTL_ACTION=show-loadstate >"$test_tmp/loadstate-failed-output" 2>&1; then
