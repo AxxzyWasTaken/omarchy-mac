@@ -74,9 +74,11 @@ if [[ ! -f $PACMAN_CONF ]]; then
 fi
 
 # One source of truth for what the repository and key must be. A checkout has
-# the helper next to this script; an installed machine has it under the package
-# once it is new enough. Neither is guaranteed on the machines this script
-# exists for, so fall back to fetching it rather than restating its contents.
+# the helper next to this script and is used as is. Otherwise fetch the
+# published copy first: the helper installed under the package is the one this
+# script exists to get past, and on a stuck machine it still selects targets edge
+# no longer publishes. The installed copy is only a fallback for when the fetch
+# fails, since a current one still recovers and a stale one fails no worse.
 resolve_helper() {
   local script_dir="" candidate
 
@@ -84,21 +86,27 @@ resolve_helper() {
     script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
   fi
 
-  for candidate in "$script_dir" "${OMARCHY_PATH:-}" /usr/share/omarchy; do
-    if [[ -n $candidate && -f "$candidate/$HELPER_RELATIVE_PATH" ]]; then
-      helper="$candidate/$HELPER_RELATIVE_PATH"
-      return 0
-    fi
-  done
+  if [[ -n $script_dir && -f "$script_dir/$HELPER_RELATIVE_PATH" ]]; then
+    helper="$script_dir/$HELPER_RELATIVE_PATH"
+    return 0
+  fi
 
   downloaded_helper=$(mktemp)
   if curl -fsSL "$HELPER_URL" -o "$downloaded_helper"; then
     helper="$downloaded_helper"
     return 0
   fi
-
   rm -f "$downloaded_helper"
   downloaded_helper=""
+
+  for candidate in "${OMARCHY_PATH:-}" /usr/share/omarchy; do
+    if [[ -n $candidate && -f "$candidate/$HELPER_RELATIVE_PATH" ]]; then
+      echo -e "\e[33mCould not fetch $HELPER_URL; using the installed $candidate/$HELPER_RELATIVE_PATH\e[0m" >&2
+      helper="$candidate/$HELPER_RELATIVE_PATH"
+      return 0
+    fi
+  done
+
   return 1
 }
 

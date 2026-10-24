@@ -150,6 +150,49 @@ grep -q '^\[omarchy\]$' "$conf" || fail 'piped recovery prepares the package sou
   fail 'piped recovery cleans its downloaded helper' "$(find "$pipe_tmp" -mindepth 1 -maxdepth 1 -printf '%f\n')"
 pass 'documented pipe runs the complete recovery without interactive package prompts'
 
+# A stuck machine still has the helper from before the selection followed
+# edge, hardcoding all three targets, under the installed package (which is
+# also where the session's OMARCHY_PATH points). The piped recovery must use
+# the published helper instead, or it dies on targets edge no longer carries.
+installed="$test_tmp/installed"
+mkdir -p "$installed/install/helpers"
+cp "$ROOT/install/helpers/arm-package-sources.sh" "$installed/install/helpers/arm-package-sources.sh"
+cat >> "$installed/install/helpers/arm-package-sources.sh" <<'OLD'
+omarchy_arm_package_targets() {
+  printf '%s\n' omarchy/hyprland omarchy/hyprtoolkit omarchy/hyprland-guiutils
+}
+OLD
+cp "$test_tmp/original" "$conf"
+rm -f "$conf.bak" "$call_log"
+output=$(
+  cat "$test_tmp/empty/fix-arm-packages.sh" | env \
+    PATH="$stub_bin:$PATH" \
+    TMPDIR="$pipe_tmp" \
+    OMARCHY_ARM_PACMAN_CONF="$conf" \
+    OMARCHY_PATH="$installed" \
+    OMARCHY_ARM_HELPER_URL="file://$test_tmp/published-helper.sh" \
+    OMARCHY_TEST_CALL_LOG="$call_log" \
+    bash -s -- --no-snapshot 2>&1
+) || fail 'piped recovery over a stale installed helper succeeds' "$output"
+grep -q $'^pacman\t-Syu\t--noconfirm\tomarchy/hyprland$' "$call_log" ||
+  fail 'piped recovery selects what edge carries, not what the installed helper hardcodes' "$(cat "$call_log")"
+! grep -q 'hyprtoolkit\|hyprland-guiutils' "$call_log" ||
+  fail 'piped recovery asks for targets edge no longer publishes' "$(cat "$call_log")"
+pass 'piped recovery prefers the published helper over a stale installed one'
+
+# Without the published copy, the installed helper is still better than nothing.
+cp "$test_tmp/original" "$conf"
+output=$(
+  TMPDIR="$download_tmp" \
+  OMARCHY_ARM_PACMAN_CONF="$conf" \
+    OMARCHY_PATH="$installed" \
+    OMARCHY_ARM_HELPER_URL="file://$test_tmp/missing-helper.sh" \
+    bash "$test_tmp/empty/fix-arm-packages.sh" --dry-run 2>&1
+) || fail 'dry run with an unreachable published helper succeeds' "$output"
+grep -q "using the installed $installed/install/helpers/arm-package-sources.sh" <<<"$output" ||
+  fail 'recovery says it fell back to the installed helper' "$output"
+pass 'recovery falls back to the installed helper when the fetch fails'
+
 cp "$test_tmp/original" "$conf"
 output=$(run_recovery --unknown-option && echo UNEXPECTED) || true
 grep -q 'Unknown option' <<<"$output" || fail 'unknown options are rejected' "$output"
