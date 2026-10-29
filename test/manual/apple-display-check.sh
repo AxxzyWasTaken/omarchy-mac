@@ -83,21 +83,27 @@ elif [[ -z $external ]]; then
   echo '  no external monitor attached; skipped the DDC case'
 fi
 
-# Ambient light keyboard
-check 'ALS and keyboard LED are available' omarchy-brightness-keyboard-auto --available
-check 'the ALS keyboard loop runs' systemctl --user is-active --quiet omarchy-brightness-keyboard-auto.service
-echo "  lux $(cat /sys/bus/iio/devices/iio:device*/in_illuminance_input 2>/dev/null | head -n1), keys $(brightnessctl -d kbd_backlight get)/255"
-if (( read_only )); then
-  echo '  read-only: skipped the lock-style keyboard blank'
+# Ambient light sensor, then the keyboard light that follows it
+check 'the ambient light sensor reads lux' bash -c 'cat /sys/bus/iio/devices/iio:device*/in_illuminance_input 2>/dev/null | head -n1 | grep -qE "^[0-9]+(\.[0-9]+)?$"'
+if [[ ! -e /sys/class/leds/kbd_backlight ]]; then
+  echo "  lux $(cat /sys/bus/iio/devices/iio:device*/in_illuminance_input 2>/dev/null | head -n1)"
+  echo '  no keyboard backlight (MacBook Neo); skipped the ALS keyboard checks'
 else
-  omarchy-brightness-keyboard off
-  sleep 12
-  lit=$(brightnessctl -d kbd_backlight get)
-  lux=$(omarchy-brightness-keyboard-auto --map-lux "$(cat /sys/bus/iio/devices/iio:device*/in_illuminance_input | head -n1 | cut -d. -f1)")
-  echo "  after a lock-style blank: keys $lit/255, room maps to $lux%"
-  check 'keys blanked by the lock screen light up again in a room that wants them' bash -c "(( $lux == 0 || $lit > 0 ))"
+  check 'ALS and keyboard LED are available' omarchy-brightness-keyboard-auto --available
+  check 'the ALS keyboard loop runs' systemctl --user is-active --quiet omarchy-brightness-keyboard-auto.service
+  echo "  lux $(cat /sys/bus/iio/devices/iio:device*/in_illuminance_input 2>/dev/null | head -n1), keys $(brightnessctl -d kbd_backlight get)/255"
+  if (( read_only )); then
+    echo '  read-only: skipped the lock-style keyboard blank'
+  else
+    omarchy-brightness-keyboard off
+    sleep 12
+    lit=$(brightnessctl -d kbd_backlight get)
+    lux=$(omarchy-brightness-keyboard-auto --map-lux "$(cat /sys/bus/iio/devices/iio:device*/in_illuminance_input | head -n1 | cut -d. -f1)")
+    echo "  after a lock-style blank: keys $lit/255, room maps to $lux%"
+    check 'keys blanked by the lock screen light up again in a room that wants them' bash -c "(( $lux == 0 || $lit > 0 ))"
+  fi
+  echo '  by eye: dim the keys to off with the keyboard-brightness keys; they stay off until the room light changes a lot'
 fi
-echo '  by eye: dim the keys to off with the keyboard-brightness keys; they stay off until the room light changes a lot'
 
 printf '\n%d failure(s)\n' "$failures"
 (( failures == 0 ))
