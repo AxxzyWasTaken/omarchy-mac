@@ -54,7 +54,7 @@ check 'the software cursor was written once' bash -c "(( \$(grep -c no_hardware_
 
 # Greeter
 check 'sddm waits for the display controller' bash -c 'systemctl cat sddm.service | grep -qx "ExecStartPre=-/usr/lib/omarchy-mac/wait-for-display"'
-check 'the display controller card exists' test -e /dev/dri/by-path/platform-soc:display-subsystem-card
+check 'the display controller card exists' bash -c 'compgen -G "/dev/dri/by-path/platform-*display-subsystem-card" >/dev/null'
 journalctl -b -k -o short-monotonic --no-pager | grep -m1 -i 'apple-drm\|appledrm' | sed 's/^/  kernel: /'
 journalctl -b -u sddm -o short-monotonic --no-pager | grep -m2 -E 'Starting|Started' | sed 's/^/  sddm: /'
 echo '  expect sddm Started after the appledrm card; by eye: greeter typing fills dots on the built-in panel with USB-C monitors attached'
